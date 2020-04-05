@@ -56,6 +56,11 @@ static int cursor_col = 0, cursor_row = 0;
 
 
 static QPlainTextEdit * lcdObj;
+static QLabel * input_valve_on;
+static QLabel * input_valve_off;
+static QLabel * output_valve_on;
+static QLabel * output_valve_off;
+
 
 static void beep()
 {
@@ -79,13 +84,24 @@ void halBeepAlarmOnOff( bool on)
 }
 
 //----------- Locals -------------
-void halInit(QPlainTextEdit * ed) {
+void halInit(QPlainTextEdit * ed,
+             QLabel * _input_valve_on,
+             QLabel * _input_valve_off,
+             QLabel * _output_valve_on,
+             QLabel * _output_valve_off)
+{
 
   player.setMedia(QUrl("qrc:/sound/Resource/tom_1s.mp3"));
   player.setVolume(80);
 
   milliTimer.start();
   lcdObj = ed;
+  input_valve_on = _input_valve_on;
+  input_valve_off = _input_valve_off;
+  output_valve_on = _output_valve_on;
+  output_valve_off = _output_valve_off;
+
+
   tm_led = halStartTimerRef();
   tm_alarm = halStartTimerRef();
   halLcdClear();
@@ -237,20 +253,79 @@ void halLcdWrite(int col, int row, const char * txt)
 
 void halValveInOn()
 {
-  LOG(">>>>>> Valve IN ON");
+  //LOG(">>>>>> Valve IN ON");
+  input_valve_off->hide();
+  input_valve_on->show();
 }
 void halValveInOff()
 {
-    LOG(">>>>>> Valve IN OFF");
+    //LOG(">>>>>> Valve IN OFF");
+    input_valve_on->hide();
+    input_valve_off->show();
+
 }
 void halValveOutOn()
 {
-  LOG("<<<<<<<< Valve OUT ON");
+  //LOG("<<<<<<<< Valve OUT ON");
+  output_valve_off->hide();
+  output_valve_on->show();
 }
 void halValveOutOff()
 {
-  LOG("<<<<<<<< Valve OUT OFF");
+  //LOG("<<<<<<<< Valve OUT OFF");
+  output_valve_on->hide();
+  output_valve_off->show();
 }
+
+extern unsigned int gAnalogPressure;
+uint16_t halGetAnalogPressure()
+{
+    return (uint16_t) gAnalogPressure;
+}
+
+#define STORAGE_FILENAME "ventsim_storage.dat"
+//-------- storage ----------
+bool halSaveDataBlock(uint8_t * data, int size)
+{
+  int len;
+  FILE * fh = fopen(STORAGE_FILENAME, "wb");
+  if (fh == NULL) {
+      LOG("halSaveDataBlock: fopen fail.");
+      return false;
+  }
+
+  len = fwrite(data, 1, (size_t) size, fh);
+  if (len != size) {
+      LOG("halSaveDataBlock: write fail.");
+      fclose(fh);
+      return false;
+  }
+  fclose(fh);
+  LOG("halSaveDataBlock: OK.");
+  return true;
+}
+
+bool halRestoreDataBlock(uint8_t * data, int size)
+{
+    int len;
+    FILE * fh = fopen(STORAGE_FILENAME, "rb");
+    if (fh == NULL) {
+        LOG("halSaveDataBlock: fopen fail.");
+        return false;
+    }
+
+    len = fread(data, 1, (size_t) size, fh);
+    if (len != size) {
+        LOG("halRestoreDataBlock: read fail.");
+        fclose(fh);
+        return false;
+    }
+    fclose(fh);
+    LOG("halRestoreDataBlock: read OK.");
+    return true;
+
+}
+
 
 //---------------- process keys ----------
 #define   DEBOUNCING_N    4

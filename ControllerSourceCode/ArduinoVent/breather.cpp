@@ -55,29 +55,21 @@ void breatherStartCycle()
     curr_pause = propGetPause();
     curr_rate = propGetDutyCycle();
     int in_out_t = curr_total_cycle_milli - (curr_rate + TM_WAIT_TO_OUT);
-    curr_out_milli = (in_out_t/2) / rate[curr_rate];
-    curr_in_milli = in_out_t - curr_out_milli;
+    curr_in_milli = (in_out_t/2) / rate[curr_rate];
+    curr_out_milli = in_out_t - curr_in_milli;
     curr_progress = 0;
     tm_start = halStartTimerRef();
     b_state = B_ST_IN;
     halValveOutOff();
     halValveInOn();
 
-//#ifdef VENTSIM
-//  char buf[256];
-//  sprintf(buf, "  curr_total_cycle_milli = %d\n  curr_pause = %d\n  curr_in_milli = %d\n  curr_out_milli = %d\n",
-//          curr_total_cycle_milli,
-//          curr_pause,
-//          curr_in_milli,
-//          curr_out_milli);
-//  LOGV(buf);
-//#endif
-
+#if 0
   LOG("Ventilation ON:");
   LOGV(" curr_total_cycle_milli = %d", curr_total_cycle_milli);
   LOGV(" curr_pause = %d", curr_pause);
   LOGV(" curr_in_milli = %d", curr_in_milli);
   LOGV(" curr_out_milli = %d", curr_out_milli);
+#endif
 
 }
 
