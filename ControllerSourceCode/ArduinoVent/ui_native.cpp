@@ -82,8 +82,8 @@ static const char * st_txt[3] = {
 
 typedef enum {
     PARAM_INT = 1,
-    PARAM_TXT_OPTIONS,
-    PARAM_TEXT_GET_VAL,
+    PARAM_CHOICES,
+    PARAM_TEXT_GETTER,
 
     PARAM_END
 
@@ -106,7 +106,7 @@ typedef struct params_st {
     propchangefunc_t handler;
     union {
       propgetfunc_t   propGetter;
-      txtGetterfunc_t txtGetter;  // valid for PARAM_TEXT_GET_VAL. Value is update periodicly on screen
+      txtGetterfunc_t txtGetter;  // valid for PARAM_TEXT_GETTER. Value is update periodicly on screen
     } getter;
 
 } params_t;
@@ -217,7 +217,7 @@ static const char * yesNoTxt[] = {
 };
 
 static /* const */ params_t params[] /* PROGMEM */ =  {
-    { PARAM_TXT_OPTIONS,        // type
+    { PARAM_CHOICES,        // type
       STR_VENTILATOR,           // name
       0,                        // val
       1,                        // step
@@ -228,6 +228,7 @@ static /* const */ params_t params[] /* PROGMEM */ =  {
       handleChangeVent,         // change prop function
       { handleGetVent },        // propGetter
     },
+
     { PARAM_INT,                // type
       STR_BPM,                  // name
       10,                       // val
@@ -240,7 +241,7 @@ static /* const */ params_t params[] /* PROGMEM */ =  {
       { handleGetBps }          // propGetter
     },
 
-    { PARAM_TXT_OPTIONS,        // type
+    { PARAM_CHOICES,        // type
       STR_DUTY_CYCLE,           // name
       0,                        // val
       1,                        // step
@@ -263,7 +264,7 @@ static /* const */ params_t params[] /* PROGMEM */ =  {
       handleChangePause,        // change prop function
       { handleGetPause }        // propGetter
     },
-    { PARAM_TXT_OPTIONS,        // type
+    { PARAM_CHOICES,        // type
       STR_LCD_AUTO_OFF,         // name
       0,                        // val
       1,                        // step
@@ -275,7 +276,7 @@ static /* const */ params_t params[] /* PROGMEM */ =  {
       { handleGetLcdAutoOff }   // propGetter
     },
 
-    {  PARAM_TEXT_GET_VAL,       // type
+    {  PARAM_TEXT_GETTER,       // type
       STR_PRESSURE,             // name
       0,                        // val
       1,                        // step
@@ -284,7 +285,7 @@ static /* const */ params_t params[] /* PROGMEM */ =  {
       0,                        // text array for options
       false,                    // no dynamic changes
       0,  // change prop function
-      { (propgetfunc_t) getPressure } // despite this is a txtGetter (note that this is a PARAM_TEXT_GET_VAL)
+      { (propgetfunc_t) getPressure } // despite this is a txtGetter (note that this is a PARAM_TEXT_GETTER)
                                       // different compilers have particular syntax in how to set union. Casting
                                       // with the first function prototype works for all. Hack but better than add lots of #ifdef's
 
@@ -340,9 +341,9 @@ void CUiNative::fillValBuf(char * buf, int idx)
 {
     if (params[idx].type == PARAM_INT)
         sprintf(buf, "%5d", params[idx].val);
-    else if (params[idx].type == PARAM_TXT_OPTIONS)
+    else if (params[idx].type == PARAM_CHOICES)
         strcpy(buf, params[idx].options[ params[idx].val ]);
-    else if (params[idx].type == PARAM_TEXT_GET_VAL)
+    else if (params[idx].type == PARAM_TEXT_GETTER)
         sprintf(buf, "%s", params[idx].getter.txtGetter());
     else
         LOG("blinker: Unexpected type");
@@ -405,7 +406,9 @@ void CUiNative::refreshValue(bool force)
     int len = LCD_NUM_COLS - PARAM_VAL_START_COL;
 
     if (params[params_idx].quickUpdate || force) {
-        params[params_idx].handler(params[params_idx].val);
+        if (params[params_idx].handler) {
+            params[params_idx].handler(params[params_idx].val);
+        }
     }
 
     memset(buf, 0x20, (size_t) len); // spaces
