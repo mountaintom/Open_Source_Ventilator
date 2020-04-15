@@ -25,9 +25,10 @@
 #include "hal.h"
 #include "languages.h"
 
-
-#define MAX_SOUND_ALARM_LOW_PRESSURE        3
-#define MAX_SOUND_ALARM_HIGH_PRESSURE       3
+#define MAX_SOUND_DEFAULT                   3
+#define MAX_SOUND_ALARM_LOW_PRESSURE        MAX_SOUND_DEFAULT
+#define MAX_SOUND_ALARM_HIGH_PRESSURE       MAX_SOUND_DEFAULT
+#define MAX_SOUND_ALARM_UNDER_SPEED         MAX_SOUND_DEFAULT
 
 // #define SIM_HIGH_PRESSURE
 
@@ -79,7 +80,7 @@ static alarm_t alarms[] = {
         ST_ALARM_OFF,
         0,
         MAX_SOUND_ALARM_HIGH_PRESSURE,
-        STR_HIGH_PRESSURE,
+        STR_ALARM_HIGH_PRESSURE,
         0,
         muteHighPressureAlarm
   },
@@ -88,10 +89,38 @@ static alarm_t alarms[] = {
         ST_ALARM_OFF,
         0,
         MAX_SOUND_ALARM_LOW_PRESSURE,
-        STR_LOW_PRESSURE,
+        STR_ALARM_LOW_PRESSURE,
         0,
         muteLowPressureAlarm
-  }
+  },
+  
+  {
+        ST_ALARM_OFF,
+        0,
+        MAX_SOUND_ALARM_UNDER_SPEED,
+        STR_ALARM_UNDER_SPEED,
+        0,
+        0
+  },
+
+    {
+          ST_ALARM_OFF,
+          0,
+          MAX_SOUND_DEFAULT,
+          STR_ALARM_FAST_CALIB_TO_START,
+          0,
+          0
+    },
+
+    {
+          ST_ALARM_OFF,
+          0,
+          MAX_SOUND_DEFAULT,
+          STR_ALARM_FAST_CALIB_DONE,
+          0,
+          0
+    },
+
 
 };
 #define NUM_ALARMS  sizeof(alarms) / sizeof(alarm_t)

@@ -22,9 +22,12 @@
 
 #include "hal.h"
 #include "event.h"
-#include "config.h"
 #include "properties.h"
 #include "pressure.h"
+
+#ifndef LCD_CFG_I2C
+  #include "LcdMv.h"
+#endif
 
 
 #include "EEPROM.h"
@@ -64,6 +67,9 @@ static int led_state = 0;
 #define FREQ2 740
 #define FREQ3 880
 
+//--------- local prototypes ------
+static void motorInit();
+
 void halBeepAlarmOnOff( bool on)
 {
   if (on == true) {
@@ -87,7 +93,7 @@ void halBeepAlarmOnOff( bool on)
   #ifdef LCD_CFG_I2C
     LiquidCrystal_I2C lcd(0x27,4,4);
   #else
-    LiquidCrystal lcd(  LCD_CFG_RS, 
+    LcdMv         lcd(  LCD_CFG_RS, 
                         LCD_CFG_E, LCD_CFG_D4, 
                         LCD_CFG_D5, 
                         LCD_CFG_D6, 
@@ -98,6 +104,10 @@ void halBeepAlarmOnOff( bool on)
 
 uint64_t tm_wdt = 0;
 static int wdt_st;
+
+//-------------------------------------------------------  
+//-------         Milliseconds Timer
+//-------------------------------------------------------  
 
 uint64_t halStartTimerRef()
 {
@@ -115,6 +125,47 @@ bool halCheckTimerExpired(uint64_t timerRef, uint64_t time)
         return true;
     return false;
 }
+
+//-------------------------------------------------------  
+//------- Microsecond timer implementation (needed for motor support)
+//-------------------------------------------------------  
+#ifdef ENABLE_MICROSEC_TIMER
+
+#define OVER_32BITS 4294967296
+static uint64_t   microFreeRunningTimer;
+static uint64_t   lastMicros; // to check overflow
+
+static void updateMicroFreeRunningTimer()
+{
+  uint64_t m = micros();
+  uint64_t elapse;
+  
+  if (m < lastMicros) {
+    LOG("micro overflow"); // happens every 70 minutes
+    elapse = (m + OVER_32BITS) - lastMicros;
+  }
+  else {
+    elapse = m - lastMicros;
+  }
+  
+  microFreeRunningTimer += elapse;
+  lastMicros = m;
+}
+
+uint64_t halStartMicroTimerRef()
+{
+  return microFreeRunningTimer;
+}
+
+bool halCheckMicroTimerExpired(uint64_t microTimerRef, uint64_t time)
+{
+  if ( (microTimerRef + time) < microFreeRunningTimer) // lapseMicroTime in microseconds
+    return true;
+  return false;
+}
+#endif // ENABLE_MICROSEC_TIMER
+//-------------------------------------------------------  
+
 
 
 static void initWdt(uint8_t reset_val)
@@ -160,6 +211,7 @@ static void loopWdt()
 
   
 void halInit(uint8_t reset_val) {
+  int r,c;
 #ifdef DEBUG_SERIAL_LOGS
   Serial.begin(9600);
   LOG("Starting...");
@@ -173,38 +225,40 @@ void halInit(uint8_t reset_val) {
   lcd.backlight();
 #else
   #if (LCD_CFG_4_ROWS == 1)
+    r = 4;
     #if (LCD_CFG_20_COLS == 1)
-        lcd.begin(20, 4);
+        c = 20;
     #else
-        lcd.begin(16, 4);
+        c = 16;
     #endif
   #else
+    r = 2;
     #if (LCD_CFG_20_COLS == 1)
-        lcd.begin(20, 2);
+        c = 20;
     #else
-        lcd.begin(16, 2);
+        c = 16;
     #endif
   #endif
+  lcd.begin(c, r);
+  lcd.setFrameBuffer( (uint8_t *) lcdBuffer, r, c);
 #endif
   halLcdClear();
 
   // -----  keys -------
-  pinMode(KEY_SET_PIN, INPUT);           // set pin to input
-  digitalWrite(KEY_SET_PIN, HIGH);       // turn on pullup resistors
-  pinMode(KEY_INCREMENT_PIN, INPUT);           // set pin to input
-  digitalWrite(KEY_INCREMENT_PIN, HIGH);       // turn on pullup resistors
-  pinMode(KEY_DECREMENT_PIN, INPUT);           // set pin to input
-  digitalWrite(KEY_DECREMENT_PIN, HIGH);       // turn on pullup resistors
+  pinMode(KEY_SET_PIN, INPUT_PULLUP);           // set pin to input
+  pinMode(KEY_INCREMENT_PIN, INPUT_PULLUP);           // set pin to input
+  pinMode(KEY_DECREMENT_PIN, INPUT_PULLUP);           // set pin to input
 
 // ------ valves -------
   pinMode(VALVE_IN_PIN, OUTPUT);           // set pin to input
-  digitalWrite(VALVE_IN_PIN, HIGH);       // turn on pullup resistors
   pinMode(VALVE_OUT_PIN, OUTPUT);           // set pin to input
-  digitalWrite(VALVE_OUT_PIN, HIGH);       // turn on pullup resistors
+  halValveInOff();
+  halValveOutOff();
 
   tm_key_sampling = halStartTimerRef();
   initWdt(reset_val);
   pressInit();
+  motorInit();
 }
 
 static void testKey()
@@ -299,8 +353,12 @@ static void lcdUpdate()
             *d++ = *s++;
         }
         *d++ = 0;
+      
+#ifdef LCD_CFG_I2C          // only for I2C as LcdMv updates by refresh
         lcd.setCursor(0,r);
         lcd.print(out);
+#endif
+      
     }
 }
 
@@ -340,7 +398,7 @@ void halLcdWrite(const char * txt)
   }
   n = strlen(txt);
   if (n > ( LCD_NUM_COLS - cursor_col)) {
-      LOG("halLcdWrite: clipping");
+      //LOG("halLcdWrite: clipping");
       n = LCD_NUM_COLS - cursor_col;
   }
   memcpy(&lcdBuffer[cursor_row][cursor_col], txt, n);
@@ -388,11 +446,60 @@ void halValveOutOff()
 #endif
 }
 
+//---------- Stepper Motor ---------
+static void motorInit() 
+{
+#ifdef STEPPER_MOTOR_STEP_PIN
+  pinMode(STEPPER_MOTOR_STEP_PIN, OUTPUT);
+  pinMode(STEPPER_MOTOR_DIR_PIN, OUTPUT);
+#ifdef STEPPER_MOTOR_EOC_PIN
+  pinMode(STEPPER_MOTOR_EOC_PIN, INPUT_PULLUP);
+#endif
+  halMotorStep(false);
+#endif
+}
+
+void halMotorStep(bool on)
+{
+#ifdef STEPPER_MOTOR_STEP_PIN
+  digitalWrite(STEPPER_MOTOR_STEP_PIN, on); 
+#endif
+}
+
+void halMotorDir(bool dir)
+{
+#ifdef STEPPER_MOTOR_STEP_PIN
+  #ifndef STEPPER_MOTOR_INVERT_DIR
+    digitalWrite(STEPPER_MOTOR_DIR_PIN, dir);
+  #else
+    digitalWrite(STEPPER_MOTOR_DIR_PIN, !dir);
+  #endif
+#endif
+}
+
+bool halMotorEOC()
+{
+#ifdef STEPPER_MOTOR_STEP_PIN
+  #ifdef STEPPER_MOTOR_EOC_PIN
+    return digitalRead(STEPPER_MOTOR_EOC_PIN);
+  #else
+    return false;
+  #endif
+#endif
+}
+
 //---------- Analog pressure sensor -----------
 uint16_t halGetAnalogPressure()
 {
   return (uint16_t) analogRead(PRESSURE_SENSOR_PIN);  //Raw digital input from pressure sensor
 }
+
+//---------- Analog pressure sensor -----------
+uint16_t halGetAnalogFlow()
+{
+  return (uint16_t) analogRead(FLOW_SENSOR_PIN);  //Raw digital input from pressure sensor
+}
+
 
 //--------- Save/Restore data in non-volatil storage
 bool halSaveDataBlock(uint8_t * data, int _size)
@@ -486,6 +593,15 @@ void halLoop()
 
 #ifdef WATCHDOG_ENABLE
   loopWdt();
+#endif
+
+#ifdef ENABLE_MICROSEC_TIMER
+  updateMicroFreeRunningTimer();
+#endif
+  
+  
+#ifndef LCD_CFG_I2C
+  lcd.stepRefresh();
 #endif
 
 }
